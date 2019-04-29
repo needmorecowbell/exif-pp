@@ -1,4 +1,5 @@
-# exif-pp
+# exif-pp: Inject json into jpeg metadata
+---------------------
 
 This tool is used for injecting a json object into the UserComment tag in the exif content of a jpeg image. It acts as a directory monitor, waiting for new images to scan. This tool does not contain classifiers by default.  
 
