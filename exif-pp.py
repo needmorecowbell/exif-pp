@@ -1,3 +1,4 @@
+import argparse 
 import sys
 import time
 from watchdog.observers import Observer
@@ -21,7 +22,6 @@ class PNGHandler (PatternMatchingEventHandler):
             rgb_image = image.convert('RGB')
             rgb_image.save(event.src_path[:-4]+'.jpg')
             print("Image converted")
-
 
 
     def on_modified(self, event):
@@ -113,14 +113,29 @@ class JPEGHandler(PatternMatchingEventHandler):
         self.process(event)
 
 
-       
-       
-if __name__ == '__main__':
-    args = sys.argv[1:] # get target path if any
-    observer = Observer()
+def main():
+    art= '''
+  ________   _______ ______      _____  _____  
+ |  ____\ \ / /_   _|  ____|    |  __ \|  __ \ 
+ | |__   \ V /  | | | |__ ______| |__) | |__) |
+ |  __|   > <   | | |  __|______|  ___/|  ___/ 
+ | |____ / . \ _| |_| |         | |    | |     
+ |______/_/ \_\_____|_|         |_|    |_|     
+                                               
+    '''
+    print(art+"Exif Post Processor\n")
 
-    observer.schedule(JPEGHandler(), recursive=True, path=args[0] if args else '.')
-    observer.schedule(PNGHandler(), recursive= True, path=args[0] if args else '.')
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-v", "--verbose", help="increase output verbosity", action="store_true")
+    parser.add_argument("-r" , "--recursive", help="search target directory recursively", action="store_true")
+    parser.add_argument("path", help="directory path to watch")
+
+    args = parser.parse_args()
+
+    observer = Observer()
+    
+    observer.schedule(JPEGHandler(), recursive=args.recursive, path=args.path)
+    observer.schedule(PNGHandler(), recursive= args.recursive, path=args.path)
     observer.start()
 
     try:
@@ -129,4 +144,9 @@ if __name__ == '__main__':
     except KeyboardInterrupt:
         observer.stop()
 
-    observer.join()
+    observer.join()      
+
+if __name__ == '__main__':
+    main()
+    args = sys.argv[1:] # get target path if any
+
