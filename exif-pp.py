@@ -1,4 +1,5 @@
 import argparse 
+import logging
 import sys
 import time
 from watchdog.observers import Observer
@@ -10,22 +11,29 @@ from PIL import Image
 
 CACHE = [] #list of filenames that have already been scanned
 
+logger = logging.getLogger(__name__)
+
+logging.getLogger('watchdog').setLevel(logging.WARNING)
+logging.getLogger('PIL').setLevel(logging.WARNING)
+logging.getLogger('piexif.helper').setLevel(logging.WARNING)
+
 class PNGHandler (PatternMatchingEventHandler):
 
     patterns=["*.png"]
             
     def convert(self, event):
         if(event.src_path not in CACHE):
-            print("converting png to jpg: "+event.src_path)
+            logger.info("converting png to jpg: "+event.src_path)
+
             CACHE.append(event.src_path)
             image = Image.open(event.src_path)
             rgb_image = image.convert('RGB')
             rgb_image.save(event.src_path[:-4]+'.jpg')
-            print("Image converted")
+
+            logger.debug("Image converted")
 
 
     def on_modified(self, event):
-        #print("Modified: "+event.src_path)
         self.convert(event)
 
     def on_moved(self, event):
@@ -41,7 +49,7 @@ class JPEGHandler(PatternMatchingEventHandler):
 
     def write_exif(self, report, path):
         # this is where we will write our json report to the metadata of the image
-        print("Writing exif...")
+        logger.debug:("Writing exif...")
 
         image = Image.open(path)
         exif_dict = {}
@@ -51,14 +59,14 @@ class JPEGHandler(PatternMatchingEventHandler):
  
             try:
                 user_comment = piexif.helper.UserComment.load(exif_dict["Exif"][piexif.ExifIFD.UserComment])
-                print("user_comments: "+user_comment)
+                logger.debug("user_comments: "+user_comment)
             except Exception as e:
-                print("No user comments")
+                logger.debug("No user comments")
 
         except Exception as e:
-            print("No exif")
+            logger.debug("No exif")
             
-        print("Creating comments...")
+        logger.debug("Creating comments...")
 
         if(report is not None):
             if(exif_dict):
@@ -70,14 +78,15 @@ class JPEGHandler(PatternMatchingEventHandler):
             exif_bytes = piexif.dump(exif_dict)
 
             #Use pillow to write back to the image
-            print("Writing report to metadata...")
+            logger.debug("Writing report to metadata...")
             image.save(path, "JPEG", exif=exif_bytes) 
-            print("Report written to image.")
+            logger.debug("Report written to image.")
+
 
 
 
     def classify_image(self, path):
-        print("Running Classifiers...")
+        logger.debug("Running Classifiers...")
         report = {}
 
         # image classifiers go here, the results from each classifier should be added with a unique key to the report dictionary
@@ -91,7 +100,7 @@ class JPEGHandler(PatternMatchingEventHandler):
     def process(self, event):
         with open(event.src_path, 'rb') as source:
             if(event.src_path not in CACHE):
-                print("Processing: "+event.src_path)
+                logger.info("Processing: "+event.src_path)
 
                 report = self.classify_image(event.src_path)
                 CACHE.append(event.src_path)
@@ -100,7 +109,7 @@ class JPEGHandler(PatternMatchingEventHandler):
                     # if there are items in the dictionary, write them to the image
                     self.write_exif(report,event.src_path)
                 else:
-                    print("No Classifier results found")
+                    logger.debug("No Classifier results found")
 
 
     def on_modified(self, event):
@@ -128,14 +137,26 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("-v", "--verbose", help="increase output verbosity", action="store_true")
     parser.add_argument("-r" , "--recursive", help="search target directory recursively", action="store_true")
+    parser.add_argument("--convert", help="converts any png images to jpg for classification", action="store_true")
     parser.add_argument("path", help="directory path to watch")
 
     args = parser.parse_args()
 
-    observer = Observer()
     
+
+    observer = Observer()
+
+    if(args.convert):
+        observer.schedule(PNGHandler(), recursive= args.recursive, path=args.path)
+
     observer.schedule(JPEGHandler(), recursive=args.recursive, path=args.path)
-    observer.schedule(PNGHandler(), recursive= args.recursive, path=args.path)
+
+
+    if(args.verbose):
+        logging.basicConfig(format='%(asctime)s - %(message)s', level=logging.DEBUG)
+    else:
+        logging.basicConfig(format='%(asctime)s - %(message)s', level= logging.INFO)
+
     observer.start()
 
     try:
@@ -148,5 +169,4 @@ def main():
 
 if __name__ == '__main__':
     main()
-    args = sys.argv[1:] # get target path if any
 
