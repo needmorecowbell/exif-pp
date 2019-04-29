@@ -9,9 +9,35 @@ from PIL import Image
 
 CACHE = [] #list of filenames that have already been scanned
 
+class PNGHandler (PatternMatchingEventHandler):
+
+    patterns=["*.png"]
+            
+    def convert(self, event):
+        if(event.src_path not in CACHE):
+            print("converting png to jpg: "+event.src_path)
+            CACHE.append(event.src_path)
+            image = Image.open(event.src_path)
+            rgb_image = image.convert('RGB')
+            rgb_image.save(event.src_path[:-4]+'.jpg')
+            print("Image converted")
+
+
+
+    def on_modified(self, event):
+        #print("Modified: "+event.src_path)
+        self.convert(event)
+
+    def on_moved(self, event):
+        self.convert(event)
+
+    def on_created(self, event):
+        self.convert(event)
+
+
 class JPEGHandler(PatternMatchingEventHandler):
 
-    patterns=["*.jpg","*.jgeg"]
+    patterns=["*.jpg","*.jpeg"]
 
     def write_exif(self, report, path):
         # this is where we will write our json report to the metadata of the image
@@ -19,6 +45,7 @@ class JPEGHandler(PatternMatchingEventHandler):
 
         image = Image.open(path)
         exif_dict = {}
+
         try:
             exif_dict = piexif.load(image.info["exif"])
  
@@ -29,50 +56,36 @@ class JPEGHandler(PatternMatchingEventHandler):
                 print("No user comments")
 
         except Exception as e:
-            print("No exif table")
+            print("No exif")
             
-        print("Creating comments")
+        print("Creating comments...")
 
-        if(exif_dict):
-            exif_dict["Exif"][piexif.ExifIFD.UserComment] = piexif.helper.UserComment.dump(report)
-        else:
-            #Make exif table if it doesnt exist
-            exif_dict["Exif"] = {piexif.ExifIFD.UserComment:piexif.helper.UserComment.dump(report) }
+        if(report is not None):
+            if(exif_dict):
+                exif_dict["Exif"][piexif.ExifIFD.UserComment] = piexif.helper.UserComment.dump(report)
+            else:
+                #Make exif if it doesnt exist
+                exif_dict["Exif"] = {piexif.ExifIFD.UserComment:piexif.helper.UserComment.dump(report) }
 
-        exif_bytes = piexif.dump(exif_dict)
+            exif_bytes = piexif.dump(exif_dict)
 
-        #Use pillow to write back to the image
-
-        print("Writing report to metadata...")
-        image.save(path, "JPEG", exif=exif_bytes) 
-        print("Report written to image.")
+            #Use pillow to write back to the image
+            print("Writing report to metadata...")
+            image.save(path, "JPEG", exif=exif_bytes) 
+            print("Report written to image.")
 
 
 
     def classify_image(self, path):
-
         print("Running Classifiers...")
-        #report = {}
-        report = """
-{
-  "setting-classifier":{
-        "result": ["beach", "outdoors"],
-        "confidence": [".3", ".9"]
-  },
-  "artificial-or-photo":{
-        "result": "photo",
-        "confidence" : ".91"
-  }
- 
-}
-"""
- 
+        report = {}
+
         # image classifiers go here, the results from each classifier should be added with a unique key to the report dictionary
 
         #report["faces"] =  imageclassifier.faces(path)
         #report["isPhoto"] =  imageclassifier2.isPhoto(path)
-        return report
-        #return json.dumps(report)
+        
+        return json.dumps(report) if report else None
 
     
     def process(self, event):
@@ -91,13 +104,10 @@ class JPEGHandler(PatternMatchingEventHandler):
 
 
     def on_modified(self, event):
-        #print("Modified: "+event.src_path)
         self.process(event)
-
 
     def on_moved(self, event):
         self.process(event)
-
 
     def on_created(self, event):
         self.process(event)
@@ -108,12 +118,14 @@ class JPEGHandler(PatternMatchingEventHandler):
 if __name__ == '__main__':
     args = sys.argv[1:] # get target path if any
     observer = Observer()
-    observer.schedule(JPEGHandler(), path=args[0] if args else '.')
+
+    observer.schedule(JPEGHandler(), recursive=True, path=args[0] if args else '.')
+    observer.schedule(PNGHandler(), recursive= True, path=args[0] if args else '.')
     observer.start()
 
     try:
         while True:
-            time.sleep(10)
+            time.sleep(1)
     except KeyboardInterrupt:
         observer.stop()
 
