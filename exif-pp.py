@@ -1,4 +1,5 @@
 import argparse 
+from pprint import pprint
 import logging
 import sys
 import time
@@ -88,6 +89,10 @@ class JPEGHandler(PatternMatchingEventHandler):
     def classify_image(self, path):
         logger.debug("Running Classifiers...")
         report = {}
+        #report["testing"]= {"confidence": ".09"}
+        #report["contains-text"] = {"result": True,
+                              #     "confidence":".3"}
+
 
         # image classifiers go here, the results from each classifier should be added with a unique key to the report dictionary
 
@@ -121,6 +126,22 @@ class JPEGHandler(PatternMatchingEventHandler):
     def on_created(self, event):
         self.process(event)
 
+def read_comments(path):
+    image = Image.open(path)
+    exif_dict = {}
+
+    try:
+        exif_dict = piexif.load(image.info["exif"])
+ 
+        try:
+            user_comment = piexif.helper.UserComment.load(exif_dict["Exif"][piexif.ExifIFD.UserComment])
+            return user_comment
+        except Exception as e:
+            print("No user comments")
+
+    except Exception as e:
+        print("No exif")
+     
 
 def main():
     art= '''
@@ -135,14 +156,28 @@ def main():
     print(art+"Exif Post Processor\n")
 
     parser = argparse.ArgumentParser()
+
     parser.add_argument("-v", "--verbose", help="increase output verbosity", action="store_true")
     parser.add_argument("-r" , "--recursive", help="search target directory recursively", action="store_true")
     parser.add_argument("--convert", help="converts any png images to jpg for classification", action="store_true")
-    parser.add_argument("path", help="directory path to watch")
+    parser.add_argument("--read", help="reads jpeg for any content in UserComment tag", action="store_true")
+    parser.add_argument("path", help="directory/file path to use")
 
     args = parser.parse_args()
 
-    
+    if(args.verbose):
+        logging.basicConfig(format='%(asctime)s - %(message)s', level=logging.DEBUG)
+    else:
+        logging.basicConfig(format='%(asctime)s - %(message)s', level= logging.INFO)
+
+
+    if(args.read):
+        logger.debug("Reading for comments: "+args.path)
+        content= json.loads(read_comments(args.path))
+
+        pprint(content)
+#        print(json.dumps(content, indent=4, sort_keys=True))
+        exit()
 
     observer = Observer()
 
@@ -150,12 +185,6 @@ def main():
         observer.schedule(PNGHandler(), recursive= args.recursive, path=args.path)
 
     observer.schedule(JPEGHandler(), recursive=args.recursive, path=args.path)
-
-
-    if(args.verbose):
-        logging.basicConfig(format='%(asctime)s - %(message)s', level=logging.DEBUG)
-    else:
-        logging.basicConfig(format='%(asctime)s - %(message)s', level= logging.INFO)
 
     observer.start()
 
